@@ -14,8 +14,8 @@ from PyQt6.QtGui import QColor, QImage, QMouseEvent, QPainter, QPaintEvent, QPen
 from PyQt6.QtWidgets import (
     QApplication,
     QDialog,
-    QFileDialog,
     QDoubleSpinBox,
+    QFileDialog,
     QHBoxLayout,
     QLabel,
     QMessageBox,
@@ -483,7 +483,6 @@ def run_rotation_tool() -> int:
     application = QApplication.instance()
     if application is None:
         application = QApplication([])
-    application.setQuitOnLastWindowClosed(True)
     dialog = SolarRotationToolDialog()
     dialog.show()
     return application.exec()

@@ -15,6 +15,7 @@ class RotationMeasurementTests(unittest.TestCase):
     """Verify corresponding-point transforms and image-coordinate angle signs."""
 
     def test_identity_alignment(self) -> None:
+        """An image aligned with itself has zero rotation and unit scale."""
         points = [(10.0, 20.0), (40.0, 20.0)]
         alignment = calculate_similarity_alignment(points, points)
         np.testing.assert_allclose(
@@ -24,6 +25,7 @@ class RotationMeasurementTests(unittest.TestCase):
         self.assertAlmostEqual(alignment.scale, 1.0)
 
     def test_rotation_scale_and_translation(self) -> None:
+        """The transform recovers rotation, scale and translation."""
         comparison = np.asarray([[0.0, 0.0], [10.0, 0.0]])
         reference = np.asarray([[5.0, 7.0], [5.0, 27.0]])
         alignment = calculate_similarity_alignment(reference, comparison)
@@ -34,6 +36,7 @@ class RotationMeasurementTests(unittest.TestCase):
         )
 
     def test_clockwise_screen_rotation_is_positive(self) -> None:
+        """Image-coordinate angle signs follow x-right/y-down coordinates."""
         comparison = [(0.0, 0.0), (0.0, 10.0)]
         reference = [(2.0, 3.0), (12.0, 3.0)]
         alignment = calculate_similarity_alignment(reference, comparison)
@@ -43,10 +46,12 @@ class RotationMeasurementTests(unittest.TestCase):
         )
 
     def test_centered_fit_preserves_aspect_ratio(self) -> None:
+        """Initial placement centers the image without distortion."""
         matrix = centered_fit_matrix((100, 200), (50, 50))
         np.testing.assert_allclose(matrix, [[2.0, 0, 50.0], [0, 2.0, 0]])
 
     def test_rotation_is_composed_around_reference_center(self) -> None:
+        """Manual rotation leaves the selected center fixed."""
         matrix = np.asarray([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]])
         result = add_rotation_about_center(matrix, 90.0, (10.0, 10.0))
         points = np.asarray([[10.0, 10.0, 1.0], [0.0, 10.0, 1.0]])
@@ -55,6 +60,7 @@ class RotationMeasurementTests(unittest.TestCase):
         np.testing.assert_allclose(actual[:, 1], [10.0, 0.0], atol=1e-12)
 
     def test_zero_length_pair_is_rejected(self) -> None:
+        """Two identical clicks cannot define an alignment direction."""
         with self.assertRaises(ValueError):
             calculate_similarity_alignment([(1, 1), (1, 1)], [(2, 2), (3, 3)])
 

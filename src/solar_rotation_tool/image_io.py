@@ -3,9 +3,9 @@
 from pathlib import Path
 from typing import Any
 
-from astropy.io import fits
 import numpy as np
 import tifffile
+from astropy.io import fits
 
 SUPPORTED_SUFFIXES = {".tif", ".tiff", ".fits", ".fit", ".fts"}
 
