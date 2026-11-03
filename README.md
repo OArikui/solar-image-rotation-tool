@@ -1,13 +1,82 @@
-# pyproject-template
+# 太陽画像 回転角測定ツール
 
-This is a template for Python project repositories, intended for use by team members.
+2枚の太陽画像を対応点で位置合わせし、透過重ね合わせで画像間の相対回転角を測定する独立GUIアプリケーションです。
 
-このテンプレートを使用する方法の詳細は、tutorialフォルダを参照してください。
-なお、本リポジトリは`Require a pull request`を有効にしているため、`pull-request-manual`を参照しながら開発を行ってください。
+## 主な機能
 
-tutorial
+- TIFF（`.tif` / `.tiff`）および FITS（`.fits` / `.fit` / `.fts`）の2次元グレースケール画像を読み込み
+- 画像A・画像Bで同じ特徴点を2点ずつクリック
+- 対応点から回転・一様倍率・平行移動を自動計算
+- 透過率スライダーによるリアルタイム重ね合わせ
+- 追加回転による手動微調整
+- 重ね合わせPNGと測定値JSONを保存
+- 元画像は変更せず、解析用の画素値も上書きしません
 
-- `tutorial\manual.md` : このテンプレートを使用する際のマニュアル
-- `tutorial\pull-request-manual.md` : 開発を行う際のマニュアル
-- `tutorial\vscode-setup.md` : VScodeの拡張機能の設定
-- `tutorial\env-setup.md` : pythonの仮想環境などの環境構築マニュアル
+## 動作環境
+
+- Python 3.11以降
+- Windows / macOS / Linux（デスクトップGUI環境）
+
+## インストール（Windows）
+
+```powershell
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+python -m pip install -e ".[dev]"
+```
+
+仮想環境を有効化できない場合は、`.venv\Scripts\python.exe` を直接指定できます。macOS / Linuxでは `source .venv/bin/activate` を使用してください。
+
+## 起動
+
+```powershell
+python -m solar_rotation_tool
+```
+
+または、インストール後は `solar-image-rotation-tool` コマンドでも起動できます。
+
+## 基本操作
+
+1. **画像 A を開く** から基準画像、**画像 B を開く** から比較画像を読み込みます。
+2. 画像Aで同じ太陽特徴を2点クリックします。
+3. 画像Bでも対応する特徴を同じ順番で2点クリックします。
+4. **4点から自動位置合わせ** を押します。
+5. 透過率を調整して重なりを確認し、必要に応じて追加回転を微調整します。
+6. **重ね合わせ画像・測定値を保存** でPNGとJSONを保存します。
+
+同じ画像で3点目をクリックすると、その画像の2点選択が新しく始まります。**対応点をクリア** は選択マーカーを消し、**初期配置に戻す** は変換を解除して中央配置へ戻します。
+
+## 回転角の定義
+
+画像座標は右向きが +X、下向きが +Y です。画面上の時計回りを正とします。
+
+- `total_correction_angle_deg`: 画像Bを画像Aに重ねるためにBへ適用した総補正角
+- `comparison_relative_rotation_deg`: Aを基準としたBの相対回転角（総補正角の符号を反転した値）
+
+例えばBがAに対して画面上で時計回りに12°回転している場合、BをAへ合わせる補正角は-12°、Bの相対回転角は+12°です。
+
+## 保存ファイル
+
+指定したPNG保存先と同じ場所に、同名のJSONを保存します。
+
+- PNG: Aを基準にBを変換して重ねた表示用画像
+- JSON: 入力ファイル、クリック座標、回転角、倍率、変換行列、透過率など
+
+## 測定上の注意
+
+- 測定対象は2画像間の**相対画像回転**です。絶対的な太陽北方向を自動推定する機能ではありません。
+- 対応点は同じ物理的特徴を正確に選び、できるだけ離れた2点を使用してください。点間距離が短いとクリック誤差が角度に大きく影響します。
+- 撮影時刻が異なる画像では、太陽自転・差動回転・黒点の変化による特徴点移動が測定に混入します。可能な限り撮影時刻が近い画像を使用してください。
+- 2組の点から相似変換（回転・一様倍率・平行移動）を求めます。レンズ歪み、せん断、非一様倍率、鏡像反転は補正しません。鏡像反転の有無は別に確認してください。
+- 画像ごとに表示用階調を独立して正規化します。保存PNGは可視化用であり、元の科学的画素値やTIFF/FITSメタデータは保持しません。
+
+## 開発・テスト
+
+```powershell
+python -m unittest discover -s tests -v
+ruff check .
+basedpyright
+```
+
+測定仕様とJSONの項目は [docs/measurement_notes.md](docs/measurement_notes.md) を参照してください。

@@ -3,76 +3,49 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "pyproject-template"
-version = "0.0.0"
-description = "This is a template for Python project repositories, intended for use by team members."
-requires-python = ">=3.13"
+name = "solar-image-rotation-tool"
+version = "0.1.0"
+description = "GUI tool for aligning two solar images and measuring their relative rotation"
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [{ name = "Fuji Astronomy Club Coders" }]
 dependencies = [
+    "astropy>=6.1",
     "numpy>=2.0",
-    "matplotlib>=3.9",
-    "Pillow>=10.0",
-    "PyYAML==6.0.3",
+    "opencv-python-headless>=4.10",
+    "PyQt6>=6.7",
+    "tifffile>=2024.8.10",
 ]
 
 [project.optional-dependencies]
 dev = [
-    "ruff>=0.13",
     "basedpyright>=1.31",
+    "ruff>=0.13",
 ]
 
-[tool.setuptools]
+[project.scripts]
+solar-image-rotation-tool = "solar_rotation_tool.app:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
 [tool.ruff]
 line-length = 100
-target-version = "py313"
-exclude = [
-    ".git",
-    ".github",
-    ".venv",
-    "venv",
-    "build",
-    "dist",
-]
+target-version = "py311"
+exclude = [".git", ".github", ".venv", "venv", "build", "dist"]
 
 [tool.ruff.lint]
-select = [
-"E", # pycodestyle (エラー)
-"F", # Pyflakes
-"I", # isort (インポート順)
-"B", # flake8-bugbear (バグの可能性)
-"UP", # pyupgrade (最新構文へのアップグレード)
-"SIM", # flake8-simplify (コードの簡略化)
-"PTH", # flake8-use-pathlib (pathlibの推奨)
-"A", # flake8-builtins (組み込み関数の上書き防止)
-"D", # pydocstyle (docstringチェック)
-"ANN", # flake8-annotations (型ヒントチェック)
-]
-
-ignore = [
-"E501", # 行の長さ制限（厳密すぎる場合は除外）
-"D107", # init メソッドのdocstring必須を解除（クラス側に書くため）
-"D400", # ピリオドを必須にしない
-"D104"
-]
-
-# pydocstyleの標準フォーマットに numpy を指定
+select = ["E", "F", "I", "B", "UP", "SIM", "PTH", "A", "D", "ANN"]
+ignore = ["E501", "D107", "D400", "D104"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "numpy"
 
-[tool.ruff.format]
-quote-style = "double"
-
 [tool.basedpyright]
-exclude = [
-    "**/__pycache__",
-    ".venv",
-    "venv",
-    "build",
-    "dist",
-]
 typeCheckingMode = "standard"
-pythonVersion = "3.13"
+pythonVersion = "3.11"
 reportMissingImports = "error"
 reportMissingTypeStubs = false
-# warning は CI を失敗させない
-failOnWarnings = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
