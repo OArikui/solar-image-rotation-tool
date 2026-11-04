@@ -19,7 +19,7 @@ class ImageCanvasTests(unittest.TestCase):
         """Create one offscreen Qt application for canvas tests."""
         global _QT_APP
         app = QApplication.instance()
-        if app is None:
+        if not isinstance(app, QApplication):
             app = QApplication([])
         _QT_APP = app
 
