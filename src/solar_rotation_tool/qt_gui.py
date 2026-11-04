@@ -32,6 +32,7 @@ from solar_rotation_tool.image_io import load_image
 from solar_rotation_tool.min2_adapter import DiskGeometry, detect_solar_disk
 from solar_rotation_tool.rotation_measurement import (
     add_rotation_about_center,
+    calculate_rotation_only_angle,
     calculate_similarity_alignment,
     center_radius_alignment_matrix,
     centered_fit_matrix,
@@ -142,7 +143,17 @@ class SolarRotationToolDialog(QDialog):
         self.rotation_spin.setSuffix("°")
         self.rotation_spin.valueChanged.connect(self._set_manual_rotation)
         adjustment_row.addWidget(self.rotation_spin)
-        self.calculate_button = QPushButton("対応点2組から回転・倍率を補正")
+        self.rotation_only_checkbox = QCheckBox(
+            "MIN2と併用（対応点から回転のみ補正）"
+        )
+        self.rotation_only_checkbox.setEnabled(False)
+        self.rotation_only_checkbox.setToolTip(
+            "MIN2で求めた中心・半径・倍率・平行移動は維持し、"
+            "対応点3組から回転角だけを算出します。"
+        )
+        self.rotation_only_checkbox.toggled.connect(self._set_rotation_only_mode)
+        adjustment_row.addWidget(self.rotation_only_checkbox)
+        self.calculate_button = QPushButton("対応点3組から回転・倍率を補正")
         self.clear_button = QPushButton("対応点をクリア")
         self.reset_button = QPushButton("位置合わせを初期化")
         self.save_button = QPushButton("重ね合わせ画像・測定値を保存")
@@ -208,7 +219,7 @@ class SolarRotationToolDialog(QDialog):
 
     def _add_reference_point(self, x: float, y: float) -> None:
         """Append a reference-image landmark, keeping at most two."""
-        if len(self.reference_points) >= 2:
+        if len(self.reference_points) >= 3:
             self.reference_points.clear()
         self.reference_points.append((x, y))
         self.reference_canvas.points = self.reference_points.copy()
@@ -217,11 +228,69 @@ class SolarRotationToolDialog(QDialog):
 
     def _add_comparison_point(self, x: float, y: float) -> None:
         """Append a comparison-image landmark, keeping at most two."""
-        if len(self.comparison_points) >= 2:
+        if len(self.comparison_points) >= 3:
             self.comparison_points.clear()
         self.comparison_points.append((x, y))
         self.comparison_canvas.points = self.comparison_points.copy()
         self.comparison_canvas.update()
+        self._update_measurement()
+
+    def _update_rotation_only_option(self) -> None:
+        """Enable MIN2-plus-landmark rotation mode only when both disk circles exist."""
+        has_disk_alignment = (
+            self.reference_disk is not None
+            and self.comparison_disk is not None
+            and self.alignment_mode
+            in {
+                "MIN2中心・半径補正",
+                "手動中心・半径補正",
+                "MIN2中心・半径補正＋対応点回転のみ",
+                "手動中心・半径補正＋対応点回転のみ",
+            }
+        )
+        if not has_disk_alignment and self.rotation_only_checkbox.isChecked():
+            self.rotation_only_checkbox.blockSignals(True)
+            self.rotation_only_checkbox.setChecked(False)
+            self.rotation_only_checkbox.blockSignals(False)
+        self.rotation_only_checkbox.setEnabled(has_disk_alignment)
+        self.calculate_button.setText(
+            "対応点3組から回転のみ補正"
+            if self.rotation_only_checkbox.isChecked()
+            else "対応点3組から回転・倍率を補正"
+        )
+
+    def _set_rotation_only_mode(self, enabled: bool) -> None:
+        """Switch between full similarity fitting and MIN2 plus rotation-only fitting."""
+        if enabled and (
+            self.reference_disk is None or self.comparison_disk is None
+        ):
+            self.rotation_only_checkbox.setChecked(False)
+            QMessageBox.warning(
+                self,
+                "MIN2補正が必要です",
+                "先にMIN2で画像A/Bの太陽円を検出するか、両方の円を手動設定してください。",
+            )
+            return
+        if not enabled and "対応点回転のみ" in self.alignment_mode:
+            method = (
+                "手動中心・半径補正"
+                if self.reference_disk is not None
+                and (
+                    self.reference_disk.method == "manual"
+                    or (
+                        self.comparison_disk is not None
+                        and self.comparison_disk.method == "manual"
+                    )
+                )
+                else "MIN2中心・半径補正"
+            )
+            self._apply_disk_alignment(method)
+            return
+        self.calculate_button.setText(
+            "対応点3組から回転のみ補正"
+            if enabled
+            else "対応点3組から回転・倍率を補正"
+        )
         self._update_measurement()
 
     def _detect_disk_geometry(self) -> None:
@@ -256,6 +325,7 @@ class SolarRotationToolDialog(QDialog):
         if self.reference_disk is not None and self.comparison_disk is not None:
             self._apply_disk_alignment("MIN2中心・半径補正")
         else:
+            self._update_rotation_only_option()
             self._update_measurement()
 
         if failures:
@@ -317,6 +387,7 @@ class SolarRotationToolDialog(QDialog):
         self.automatic_angle = 0.0
         self.scale = self.reference_disk.radius / self.comparison_disk.radius
         self._reset_manual_rotation()
+        self._update_rotation_only_option()
         self._refresh_overlay()
         self._update_measurement()
 
@@ -336,22 +407,51 @@ class SolarRotationToolDialog(QDialog):
         )
 
     def _calculate_alignment(self) -> None:
-        """Calculate rotation, uniform scale and translation from two landmark pairs."""
+        """Calculate a three-point fit, or only rotation when paired with MIN2."""
         if self.reference_rgb is None or self.comparison_rgb is None:
             QMessageBox.warning(self, "画像未選択", "画像 A と画像 B を読み込んでください。")
             return
-        try:
-            result = calculate_similarity_alignment(
-                self.reference_points, self.comparison_points
-            )
-        except ValueError as error:
-            QMessageBox.warning(self, "対応点が不足しています", str(error))
-            return
 
-        self.base_matrix = result.matrix
-        self.alignment_mode = "対応点による相似変換"
-        self.automatic_angle = result.rotation_deg
-        self.scale = result.scale
+        if self.rotation_only_checkbox.isChecked():
+            if (
+                self.reference_disk is None
+                or self.comparison_disk is None
+                or self.base_matrix is None
+            ):
+                QMessageBox.warning(
+                    self, "MIN2補正が必要です", "先に画像A/Bの中心・半径補正を行ってください。"
+                )
+                return
+            try:
+                angle = calculate_rotation_only_angle(
+                    self.reference_points, self.comparison_points
+                )
+            except ValueError as error:
+                QMessageBox.warning(self, "対応点が不足しています", str(error))
+                return
+
+            self.automatic_angle = angle
+            prefix = (
+                "手動中心・半径補正"
+                if self.reference_disk.method == "manual"
+                or self.comparison_disk.method == "manual"
+                else "MIN2中心・半径補正"
+            )
+            self.alignment_mode = f"{prefix}＋対応点回転のみ"
+        else:
+            try:
+                result = calculate_similarity_alignment(
+                    self.reference_points, self.comparison_points
+                )
+            except ValueError as error:
+                QMessageBox.warning(self, "対応点が不足しています", str(error))
+                return
+
+            self.base_matrix = result.matrix
+            self.alignment_mode = "対応点による相似変換"
+            self.automatic_angle = result.rotation_deg
+            self.scale = result.scale
+
         self._reset_manual_rotation()
         self._refresh_overlay()
         self._update_measurement()
@@ -378,6 +478,7 @@ class SolarRotationToolDialog(QDialog):
         self.alignment_mode = "initial"
         self.automatic_angle = 0.0
         self._reset_manual_rotation()
+        self._update_rotation_only_option()
         if self.reference_rgb is not None and self.comparison_rgb is not None:
             self.base_matrix = centered_fit_matrix(
                 self.reference_rgb.shape[:2], self.comparison_rgb.shape[:2]
@@ -416,8 +517,19 @@ class SolarRotationToolDialog(QDialog):
         if self.base_matrix is None or self.reference_rgb is None:
             return None
         height, width = self.reference_rgb.shape[:2]
+        rotation_only_mode = "対応点回転のみ" in self.alignment_mode
+        rotation_center = (
+            self.reference_disk.center
+            if rotation_only_mode and self.reference_disk is not None
+            else (width / 2.0, height / 2.0)
+        )
+        applied_angle = (
+            self.automatic_angle + self.manual_angle
+            if rotation_only_mode
+            else self.manual_angle
+        )
         return add_rotation_about_center(
-            self.base_matrix, self.manual_angle, (width / 2.0, height / 2.0)
+            self.base_matrix, applied_angle, rotation_center
         )
 
     def _warped_comparison(self) -> tuple[np.ndarray, np.ndarray] | None:
@@ -467,16 +579,37 @@ class SolarRotationToolDialog(QDialog):
     def _update_measurement(self) -> None:
         """Update landmark status and derived rotation values."""
         point_status = (
-            f"A: {len(self.reference_points)}/2 点　 B: {len(self.comparison_points)}/2 点"
+            f"A: {len(self.reference_points)}/3 点　 B: {len(self.comparison_points)}/3 点"
         )
         total_correction = self.automatic_angle + self.manual_angle
-        if self.alignment_mode == "MIN2中心・半径補正":
+        if self.alignment_mode == "MIN2中心・半径補正＋対応点回転のみ":
             alignment_status = (
-                f"MIN2 v2.4.1による中心・半径補正（回転は未補正） / 倍率: {self.scale:.6f}"
+                f"MIN2中心・半径補正 + 対応点から回転のみ補正: "
+                f"{self.automatic_angle:+.3f}° / 倍率: {self.scale:.6f}"
+            )
+        elif self.alignment_mode == "手動中心・半径補正＋対応点回転のみ":
+            alignment_status = (
+                f"手動中心・半径補正 + 対応点から回転のみ補正: "
+                f"{self.automatic_angle:+.3f}° / 倍率: {self.scale:.6f}"
+            )
+        elif self.alignment_mode == "MIN2中心・半径補正":
+            rotation_hint = (
+                "（対応点から回転のみ補正を選択中）"
+                if self.rotation_only_checkbox.isChecked()
+                else "（回転は未補正）"
+            )
+            alignment_status = (
+                f"MIN2 v2.4.1による中心・半径補正{rotation_hint} "
+                f"/ 倍率: {self.scale:.6f}"
             )
         elif self.alignment_mode == "手動中心・半径補正":
+            rotation_hint = (
+                "（対応点から回転のみ補正を選択中）"
+                if self.rotation_only_checkbox.isChecked()
+                else "（回転は未補正）"
+            )
             alignment_status = (
-                f"手動中心・半径補正（回転は未補正） / 倍率: {self.scale:.6f}"
+                f"手動中心・半径補正{rotation_hint} / 倍率: {self.scale:.6f}"
             )
         elif self.alignment_mode == "対応点による相似変換":
             alignment_status = (
@@ -528,6 +661,19 @@ class SolarRotationToolDialog(QDialog):
                 "pixel x right, y down; positive rotation is clockwise on screen"
             ),
             "alignment_method": self.alignment_mode,
+            "landmark_fit_mode": (
+                "rotation_only"
+                if "対応点回転のみ" in self.alignment_mode
+                else "similarity"
+                if self.alignment_mode == "対応点による相似変換"
+                else None
+            ),
+            "automatic_rotation_pivot_px": (
+                list(self.reference_disk.center)
+                if "対応点回転のみ" in self.alignment_mode
+                and self.reference_disk is not None
+                else None
+            ),
             "reference_disk": asdict(self.reference_disk) if self.reference_disk else None,
             "comparison_disk": asdict(self.comparison_disk) if self.comparison_disk else None,
             "reference_points_px": self.reference_points,
