@@ -12,6 +12,7 @@ authors = [{ name = "Fuji Astronomy Club Coders" }]
 dependencies = [
     "astropy>=6.1",
     "numpy>=2.0",
+    "matplotlib>=3.9",
     "opencv-python-headless>=4.10",
     "PyQt6>=6.7",
     "tifffile>=2024.8.10",
@@ -32,7 +33,7 @@ where = ["src"]
 [tool.ruff]
 line-length = 100
 target-version = "py311"
-exclude = [".git", ".github", ".venv", "venv", "build", "dist"]
+exclude = [".git", ".github", ".venv", "venv", "build", "dist", "src/solar_rotation_tool/vendor/MIN2ver2.py"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "SIM", "PTH", "A", "D", "ANN"]
@@ -42,6 +43,7 @@ ignore = ["E501", "D107", "D400", "D104"]
 convention = "numpy"
 
 [tool.basedpyright]
+exclude = ["src/solar_rotation_tool/vendor/MIN2ver2.py"]
 typeCheckingMode = "standard"
 pythonVersion = "3.11"
 reportMissingImports = "error"

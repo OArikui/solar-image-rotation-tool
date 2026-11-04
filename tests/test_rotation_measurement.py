@@ -8,6 +8,7 @@ from solar_rotation_tool.rotation_measurement import (
     add_rotation_about_center,
     calculate_similarity_alignment,
     centered_fit_matrix,
+    center_radius_alignment_matrix,
 )
 
 
@@ -67,3 +68,19 @@ class RotationMeasurementTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+    def test_center_radius_alignment_maps_centers_and_radii(self) -> None:
+        """The center/radius transform maps the comparison disk onto the reference."""
+        matrix = center_radius_alignment_matrix(
+            (120.0, 90.0), 80.0, (300.0, 220.0), 160.0
+        )
+        center = matrix @ np.asarray([300.0, 220.0, 1.0])
+        edge = matrix @ np.asarray([460.0, 220.0, 1.0])
+        np.testing.assert_allclose(center, [120.0, 90.0], atol=1e-12)
+        np.testing.assert_allclose(edge, [200.0, 90.0], atol=1e-12)
+
+    def test_center_radius_alignment_rejects_invalid_radius(self) -> None:
+        """Zero or negative disk radii are not valid scale references."""
+        with self.assertRaises(ValueError):
+            center_radius_alignment_matrix((0.0, 0.0), 10.0, (1.0, 1.0), 0.0)
