@@ -1,5 +1,6 @@
 """Tests for three-point rotation and similarity measurements."""
 
+import math
 import unittest
 
 import numpy as np

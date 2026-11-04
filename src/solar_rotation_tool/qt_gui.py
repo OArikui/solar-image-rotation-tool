@@ -271,6 +271,21 @@ class SolarRotationToolDialog(QDialog):
                 "先にMIN2で画像A/Bの太陽円を検出するか、両方の円を手動設定してください。",
             )
             return
+        if not enabled and "対応点回転のみ" in self.alignment_mode:
+            method = (
+                "手動中心・半径補正"
+                if self.reference_disk is not None
+                and (
+                    self.reference_disk.method == "manual"
+                    or (
+                        self.comparison_disk is not None
+                        and self.comparison_disk.method == "manual"
+                    )
+                )
+                else "MIN2中心・半径補正"
+            )
+            self._apply_disk_alignment(method)
+            return
         self.calculate_button.setText(
             "対応点3組から回転のみ補正"
             if enabled
@@ -502,13 +517,19 @@ class SolarRotationToolDialog(QDialog):
         if self.base_matrix is None or self.reference_rgb is None:
             return None
         height, width = self.reference_rgb.shape[:2]
+        rotation_only_mode = "対応点回転のみ" in self.alignment_mode
         rotation_center = (
             self.reference_disk.center
-            if "対応点回転のみ" in self.alignment_mode and self.reference_disk is not None
+            if rotation_only_mode and self.reference_disk is not None
             else (width / 2.0, height / 2.0)
         )
+        applied_angle = (
+            self.automatic_angle + self.manual_angle
+            if rotation_only_mode
+            else self.manual_angle
+        )
         return add_rotation_about_center(
-            self.base_matrix, self.manual_angle, rotation_center
+            self.base_matrix, applied_angle, rotation_center
         )
 
     def _warped_comparison(self) -> tuple[np.ndarray, np.ndarray] | None:
@@ -572,12 +593,23 @@ class SolarRotationToolDialog(QDialog):
                 f"{self.automatic_angle:+.3f}° / 倍率: {self.scale:.6f}"
             )
         elif self.alignment_mode == "MIN2中心・半径補正":
+            rotation_hint = (
+                "（対応点から回転のみ補正を選択中）"
+                if self.rotation_only_checkbox.isChecked()
+                else "（回転は未補正）"
+            )
             alignment_status = (
-                f"MIN2 v2.4.1による中心・半径補正（回転は未補正） / 倍率: {self.scale:.6f}"
+                f"MIN2 v2.4.1による中心・半径補正{rotation_hint} "
+                f"/ 倍率: {self.scale:.6f}"
             )
         elif self.alignment_mode == "手動中心・半径補正":
+            rotation_hint = (
+                "（対応点から回転のみ補正を選択中）"
+                if self.rotation_only_checkbox.isChecked()
+                else "（回転は未補正）"
+            )
             alignment_status = (
-                f"手動中心・半径補正（回転は未補正） / 倍率: {self.scale:.6f}"
+                f"手動中心・半径補正{rotation_hint} / 倍率: {self.scale:.6f}"
             )
         elif self.alignment_mode == "対応点による相似変換":
             alignment_status = (
