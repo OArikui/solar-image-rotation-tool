@@ -30,41 +30,92 @@ class SimilarityAlignment:
         return homogeneous @ self.matrix.T
 
 
+def _validate_three_point_sets(
+    reference_points: NDArray[np.floating[Any]] | list[tuple[float, float]],
+    comparison_points: NDArray[np.floating[Any]] | list[tuple[float, float]],
+) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
+    """Validate and return three ordered correspondence pairs."""
+    reference = np.asarray(reference_points, dtype=np.float64)
+    comparison = np.asarray(comparison_points, dtype=np.float64)
+    if reference.shape != (3, 2) or comparison.shape != (3, 2):
+        raise ValueError("各画像で対応点を3点ずつ指定してください。")
+    if not np.all(np.isfinite(reference)) or not np.all(np.isfinite(comparison)):
+        raise ValueError("対応点の座標は有限値にしてください。")
+    return reference, comparison
+
+
+def _rotation_covariance(
+    reference: NDArray[np.float64],
+    comparison: NDArray[np.float64],
+) -> tuple[float, float, float]:
+    """Return rotation covariance terms and comparison spread."""
+    reference_centered = reference - np.mean(reference, axis=0)
+    comparison_centered = comparison - np.mean(comparison, axis=0)
+    dot_sum = float(np.sum(comparison_centered * reference_centered))
+    cross_sum = float(
+        np.sum(
+            comparison_centered[:, 0] * reference_centered[:, 1]
+            - comparison_centered[:, 1] * reference_centered[:, 0]
+        )
+    )
+    comparison_spread = float(np.sum(comparison_centered**2))
+    return dot_sum, cross_sum, comparison_spread
+
+
 def calculate_similarity_alignment(
     reference_points: NDArray[np.floating[Any]] | list[tuple[float, float]],
     comparison_points: NDArray[np.floating[Any]] | list[tuple[float, float]],
 ) -> SimilarityAlignment:
-    """Calculate rotation, scale and translation from two matching point pairs.
+    """Fit rotation, uniform scale and translation to three matching point pairs.
 
+    The three point pairs are fitted with a least-squares similarity transform.
     The matrix maps comparison-image coordinates to reference-image coordinates.
     With image coordinates (x right, y down), positive angles are clockwise.
     """
-    reference = np.asarray(reference_points, dtype=np.float64)
-    comparison = np.asarray(comparison_points, dtype=np.float64)
-    if reference.shape != (2, 2) or comparison.shape != (2, 2):
-        raise ValueError("各画像で対応点を2点ずつ指定してください。")
-    if not np.all(np.isfinite(reference)) or not np.all(np.isfinite(comparison)):
-        raise ValueError("対応点の座標は有限値にしてください。")
+    reference, comparison = _validate_three_point_sets(
+        reference_points, comparison_points
+    )
+    dot_sum, cross_sum, comparison_spread = _rotation_covariance(
+        reference, comparison
+    )
+    covariance_length = math.hypot(dot_sum, cross_sum)
+    if comparison_spread <= 1e-9 or covariance_length <= 1e-9:
+        raise ValueError("対応点の配置から相似変換を計算できません。")
 
-    reference_vector = reference[1] - reference[0]
-    comparison_vector = comparison[1] - comparison[0]
-    reference_length = float(np.linalg.norm(reference_vector))
-    comparison_length = float(np.linalg.norm(comparison_vector))
-    if reference_length <= 1e-9 or comparison_length <= 1e-9:
-        raise ValueError("2点は異なる位置を選択してください。")
-
-    reference_angle = math.atan2(float(reference_vector[1]), float(reference_vector[0]))
-    comparison_angle = math.atan2(float(comparison_vector[1]), float(comparison_vector[0]))
-    angle = reference_angle - comparison_angle
-    scale = reference_length / comparison_length
+    angle = math.atan2(cross_sum, dot_sum)
+    scale = covariance_length / comparison_spread
     cosine = math.cos(angle) * scale
     sine = math.sin(angle) * scale
     linear = np.asarray([[cosine, -sine], [sine, cosine]], dtype=np.float64)
-    translation = reference[0] - linear @ comparison[0]
+    reference_center = np.mean(reference, axis=0)
+    comparison_center = np.mean(comparison, axis=0)
+    translation = reference_center - linear @ comparison_center
     matrix = np.column_stack((linear, translation))
     rotation_deg = (math.degrees(angle) + 180.0) % 360.0 - 180.0
     return SimilarityAlignment(matrix=matrix, rotation_deg=rotation_deg, scale=scale)
 
+
+def calculate_rotation_only_angle(
+    reference_points: NDArray[np.floating[Any]] | list[tuple[float, float]],
+    comparison_points: NDArray[np.floating[Any]] | list[tuple[float, float]],
+) -> float:
+    """Estimate only the rotation angle from three corresponding point pairs.
+
+    Translation and scale are intentionally not calculated or modified. The
+    least-squares angle is measured around the centroid of each point set and
+    should be applied around the reference solar-disk center after MIN2 fitting.
+    """
+    reference, comparison = _validate_three_point_sets(
+        reference_points, comparison_points
+    )
+    dot_sum, cross_sum, comparison_spread = _rotation_covariance(
+        reference, comparison
+    )
+    covariance_length = math.hypot(dot_sum, cross_sum)
+    if comparison_spread <= 1e-9 or covariance_length <= 1e-9:
+        raise ValueError("対応点の配置から回転角を計算できません。")
+    angle = math.atan2(cross_sum, dot_sum)
+    return (math.degrees(angle) + 180.0) % 360.0 - 180.0
 
 def centered_fit_matrix(
     reference_shape: tuple[int, int],
