@@ -182,9 +182,9 @@ class ImageCanvas(QWidget):
             painter.drawEllipse(handle, handle_size, handle_size)
             painter.setBrush(Qt.BrushStyle.NoBrush)
 
-    def wheelEvent(self, event: QWheelEvent) -> None:  # noqa: N802
+    def wheelEvent(self, event: QWheelEvent | None) -> None:  # noqa: N802
         """Zoom around the cursor while keeping the pixel beneath it stationary."""
-        if self.image is None:
+        if event is None or self.image is None:
             event.ignore()
             return
         delta = event.angleDelta().y()
@@ -212,9 +212,9 @@ class ImageCanvas(QWidget):
         self.update()
         event.accept()
 
-    def mousePressEvent(self, event: QMouseEvent) -> None:  # noqa: N802
+    def mousePressEvent(self, event: QMouseEvent | None) -> None:  # noqa: N802
         """Start panning, editing a disk circle, or selecting a landmark."""
-        if self.image is None:
+        if event is None or self.image is None:
             return
         if event.button() in (Qt.MouseButton.MiddleButton, Qt.MouseButton.RightButton):
             self._panning = True
@@ -267,8 +267,10 @@ class ImageCanvas(QWidget):
         self._disk_drag_mode = "new_radius"
         self.update()
 
-    def mouseMoveEvent(self, event: QMouseEvent) -> None:  # noqa: N802
+    def mouseMoveEvent(self, event: QMouseEvent | None) -> None:  # noqa: N802
         """Update pan or the active manual disk-circle drag."""
+        if event is None:
+            return
         if self._panning and self._last_pan_position is not None:
             position = event.position()
             delta = position - self._last_pan_position
@@ -294,8 +296,10 @@ class ImageCanvas(QWidget):
             )
         self.update()
 
-    def mouseReleaseEvent(self, event: QMouseEvent) -> None:  # noqa: N802
+    def mouseReleaseEvent(self, event: QMouseEvent | None) -> None:  # noqa: N802
         """Finish panning or publish the manually edited disk circle."""
+        if event is None:
+            return
         if self._panning and event.button() in (
             Qt.MouseButton.MiddleButton,
             Qt.MouseButton.RightButton,
@@ -322,8 +326,8 @@ class ImageCanvas(QWidget):
             self.update()
             event.accept()
 
-    def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:  # noqa: N802
+    def mouseDoubleClickEvent(self, event: QMouseEvent | None) -> None:  # noqa: N802
         """Fit the image to the canvas on a left-button double click."""
-        if event.button() == Qt.MouseButton.LeftButton:
+        if event is not None and event.button() == Qt.MouseButton.LeftButton:
             self.fit_to_view()
             event.accept()

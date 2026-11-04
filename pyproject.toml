@@ -43,6 +43,7 @@ ignore = ["E501", "D107", "D400", "D104"]
 convention = "numpy"
 
 [tool.basedpyright]
+extraPaths = ["src"]
 exclude = ["src/solar_rotation_tool/vendor/MIN2ver2.py"]
 typeCheckingMode = "standard"
 pythonVersion = "3.11"
