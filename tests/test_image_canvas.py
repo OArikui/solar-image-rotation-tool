@@ -12,7 +12,7 @@ from solar_rotation_tool.image_canvas import ImageCanvas
 class ImageCanvasTests(unittest.TestCase):
     """Verify that view transforms do not alter original-image coordinates."""
 
-    app: QApplication
+    _app: QApplication | None = None
 
     @classmethod
     def setUpClass(cls) -> None:
@@ -20,7 +20,7 @@ class ImageCanvasTests(unittest.TestCase):
         app = QApplication.instance()
         if app is None:
             app = QApplication([])
-        cls.app = app
+        cls._app = app
 
     def test_image_coordinates_round_trip_after_zoom_and_pan(self) -> None:
         """Zoom and pan still map cursor locations to the source pixel coordinate."""
@@ -35,7 +35,8 @@ class ImageCanvasTests(unittest.TestCase):
         actual_point = canvas._widget_to_image(widget_point)
 
         self.assertIsNotNone(actual_point)
-        np.testing.assert_allclose(actual_point, source_point, atol=1e-10)
+        assert actual_point is not None
+        np.testing.assert_allclose(np.asarray(actual_point), np.asarray(source_point), atol=1e-10)
 
     def test_fit_to_view_resets_zoom_and_pan(self) -> None:
         """The fit action restores the default canvas transform."""
