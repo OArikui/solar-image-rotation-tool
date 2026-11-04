@@ -112,3 +112,33 @@ def add_rotation_about_center(
     homogeneous = np.vstack((source_matrix, [0.0, 0.0, 1.0]))
     rotation_homogeneous = np.vstack((rotation, [0.0, 0.0, 1.0]))
     return (rotation_homogeneous @ homogeneous)[:2]
+
+
+def center_radius_alignment_matrix(
+    reference_center: tuple[float, float],
+    reference_radius: float,
+    comparison_center: tuple[float, float],
+    comparison_radius: float,
+) -> NDArray[np.float64]:
+    """Map a comparison solar-disk center/radius onto a reference disk.
+
+    The resulting transform applies uniform scaling and translation only.
+    It deliberately does not estimate rotation.
+    """
+    reference = np.asarray(reference_center, dtype=np.float64)
+    comparison = np.asarray(comparison_center, dtype=np.float64)
+    if reference.shape != (2,) or comparison.shape != (2,):
+        raise ValueError("中心座標はそれぞれ (x, y) の2要素にしてください。")
+    if not np.all(np.isfinite(reference)) or not np.all(np.isfinite(comparison)):
+        raise ValueError("中心座標は有限値にしてください。")
+    if not math.isfinite(reference_radius) or not math.isfinite(comparison_radius):
+        raise ValueError("半径は有限値にしてください。")
+    if reference_radius <= 0.0 or comparison_radius <= 0.0:
+        raise ValueError("半径は正の値にしてください。")
+
+    scale = reference_radius / comparison_radius
+    translation = reference - scale * comparison
+    return np.asarray(
+        [[scale, 0.0, translation[0]], [0.0, scale, translation[1]]],
+        dtype=np.float64,
+    )
