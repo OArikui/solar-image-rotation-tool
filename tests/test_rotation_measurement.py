@@ -65,11 +65,7 @@ class RotationMeasurementTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             calculate_similarity_alignment([(1, 1), (1, 1)], [(2, 2), (3, 3)])
 
-
-if __name__ == "__main__":
-    unittest.main()
-
-
+ 
     def test_center_radius_alignment_maps_centers_and_radii(self) -> None:
         """The center/radius transform maps the comparison disk onto the reference."""
         matrix = center_radius_alignment_matrix(
@@ -84,3 +80,7 @@ if __name__ == "__main__":
         """Zero or negative disk radii are not valid scale references."""
         with self.assertRaises(ValueError):
             center_radius_alignment_matrix((0.0, 0.0), 10.0, (1.0, 1.0), 0.0)
+
+
+if __name__ == "__main__":
+    unittest.main()
