@@ -17,10 +17,11 @@ def load_image(image_path: str | Path) -> np.ndarray:
     suffix = path.suffix.lower()
     if suffix not in SUPPORTED_SUFFIXES:
         raise ValueError(f"Unsupported image format: {suffix}")
-    if suffix in {".tif", ".tiff"}:
-        image = tifffile.imread(path)
-    else:
-        image = fits.getdata(path)
+    image = (
+        tifffile.imread(path)
+        if suffix in {".tif", ".tiff"}
+        else fits.getdata(path)
+    )
     if image is None:
         raise ValueError(f"Could not read image: {path}")
     array = np.asarray(image)
