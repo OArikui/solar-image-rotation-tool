@@ -184,7 +184,9 @@ class ImageCanvas(QWidget):
 
     def wheelEvent(self, event: QWheelEvent | None) -> None:  # noqa: N802
         """Zoom around the cursor while keeping the pixel beneath it stationary."""
-        if event is None or self.image is None:
+        if event is None:
+            return
+        if self.image is None:
             event.ignore()
             return
         delta = event.angleDelta().y()
