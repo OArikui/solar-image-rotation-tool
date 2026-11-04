@@ -33,11 +33,13 @@ python -m pip install -e ".[dev]"
 
 ## 起動
 
+リポジトリのルートディレクトリで次のコマンドを実行します。
+
 ```powershell
-python -m solar_rotation_tool
+python run.py
 ```
 
-または、インストール後は `solar-image-rotation-tool` コマンドでも起動できます。
+パッケージとしてインストールした場合は、`solar-image-rotation-tool` コマンドでも起動できます。
 
 ## 基本操作
 
@@ -88,7 +90,7 @@ basedpyright
 
 ## Windowsの単純起動
 
-Windowsではリポジトリ直下の \`run.bat\` を実行できます。このバッチファイルはアプリを起動するだけです。仮想環境の作成、依存関係のインストール、更新などは行いません。事前に必要なパッケージをインストールしたPython環境をPATHに設定するか、その環境を有効化してください。
+Windowsではリポジトリ直下の `run.bat` をダブルクリックして起動できます。既存の `.venv` があればそのPythonを優先し、なければPATH上のPythonでルートの `run.py` を実行します。バッチファイルは起動のみを行い、仮想環境の作成や依存関係のインストール・更新は行いません。
 
 ## Zoom / Pan
 
