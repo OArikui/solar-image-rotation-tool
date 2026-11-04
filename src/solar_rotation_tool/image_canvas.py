@@ -45,8 +45,9 @@ class ImageCanvas(QWidget):
         else:
             self._image_buffer = np.ascontiguousarray(image, dtype=np.uint8).copy()
             height, width = self._image_buffer.shape[:2]
+            image_bytes = self._image_buffer.tobytes()
             self.image = QImage(
-                self._image_buffer.data,
+                image_bytes,
                 width,
                 height,
                 int(self._image_buffer.strides[0]),

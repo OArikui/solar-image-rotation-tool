@@ -7,8 +7,8 @@ import numpy as np
 from solar_rotation_tool.rotation_measurement import (
     add_rotation_about_center,
     calculate_similarity_alignment,
-    centered_fit_matrix,
     center_radius_alignment_matrix,
+    centered_fit_matrix,
 )
 
 
