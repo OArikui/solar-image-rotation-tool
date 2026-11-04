@@ -1,7 +1,6 @@
 """Regression tests for image-canvas zoom and pan coordinate handling."""
 
 import unittest
-from typing import ClassVar
 
 import numpy as np
 from PyQt6.QtCore import QPointF
@@ -9,19 +8,20 @@ from PyQt6.QtWidgets import QApplication
 
 from solar_rotation_tool.image_canvas import ImageCanvas
 
+_QT_APP: QApplication | None = None
+
 
 class ImageCanvasTests(unittest.TestCase):
     """Verify that view transforms do not alter original-image coordinates."""
 
-    _app: ClassVar[QApplication | None] = None
-
     @classmethod
     def setUpClass(cls) -> None:
         """Create one offscreen Qt application for canvas tests."""
+        global _QT_APP
         app = QApplication.instance()
         if app is None:
             app = QApplication([])
-        cls._app = app
+        _QT_APP = app
 
     def test_image_coordinates_round_trip_after_zoom_and_pan(self) -> None:
         """Zoom and pan still map cursor locations to the source pixel coordinate."""
