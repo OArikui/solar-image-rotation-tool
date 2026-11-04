@@ -1,6 +1,7 @@
 """Regression tests for image-canvas zoom and pan coordinate handling."""
 
 import unittest
+from typing import ClassVar
 
 import numpy as np
 from PyQt6.QtCore import QPointF
@@ -12,7 +13,7 @@ from solar_rotation_tool.image_canvas import ImageCanvas
 class ImageCanvasTests(unittest.TestCase):
     """Verify that view transforms do not alter original-image coordinates."""
 
-    _app: QApplication | None = None
+    _app: ClassVar[QApplication | None] = None
 
     @classmethod
     def setUpClass(cls) -> None:
