@@ -106,7 +106,10 @@ class SolarRotationDialogTests(unittest.TestCase):
         dialog.rotation_only_checkbox.setChecked(False)
         self.assertEqual(dialog.alignment_mode, "MIN2中心・半径補正")
         self.assertAlmostEqual(dialog.automatic_angle, 0.0)
-        np.testing.assert_allclose(dialog._current_matrix(), base_matrix, atol=1e-12)
+        restored_matrix = dialog._current_matrix()
+        self.assertIsNotNone(restored_matrix)
+        assert restored_matrix is not None
+        np.testing.assert_allclose(restored_matrix, base_matrix, atol=1e-12)
 
 
 if __name__ == "__main__":
