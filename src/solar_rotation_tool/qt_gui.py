@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict
 import json
 import math
+from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
@@ -70,6 +70,7 @@ class SolarRotationToolDialog(QDialog):
         self.automatic_angle = 0.0
         self.scale = 1.0
         self.manual_angle = 0.0
+        self._overlay_drag_base_angle = 0.0
         self.opacity = 50
 
         root = QVBoxLayout(self)
@@ -91,6 +92,7 @@ class SolarRotationToolDialog(QDialog):
             QLabel(
                 "Zoom: ホイール（カーソル位置中心） / Pan: 中ボタンまたは右ボタンをドラッグ"
                 " / ダブルクリック: 表示範囲をリセット"
+                " / 重ね合わせ画面: 左ドラッグでBを回転"
             )
         )
 
@@ -167,7 +169,21 @@ class SolarRotationToolDialog(QDialog):
         adjustment_row.addWidget(self.save_button)
         root.addLayout(adjustment_row)
 
-        self.overlay_canvas = ImageCanvas("A + B: 透過重ね合わせ")
+        self.overlay_canvas = ImageCanvas(
+            "補色重ね合わせ（A: シアン / B: レッド）  A上:シアン矢印 / B上:赤矢印"
+        )
+        self.overlay_canvas.rotation_drag_started.connect(
+            self._begin_overlay_rotation_drag
+        )
+        self.overlay_canvas.rotation_dragged.connect(
+            self._on_overlay_rotation_dragged
+        )
+        self.overlay_canvas.rotation_drag_finished.connect(
+            self._finish_overlay_rotation_drag
+        )
+        self.overlay_canvas.setToolTip(
+            "左ドラッグでB画像を回転します。シアン矢印はA、赤矢印は変換後のBの上方向です。"
+        )
         self.measurement_label = QLabel(
             "画像 A・B を読み込み、MIN2による中心・半径補正、または対応点を指定してください。"
         )
@@ -500,6 +516,18 @@ class SolarRotationToolDialog(QDialog):
         self.comparison_canvas.fit_to_view()
         self.overlay_canvas.fit_to_view()
 
+    def _begin_overlay_rotation_drag(self) -> None:
+        """Remember the current manual angle before an overlay drag begins."""
+        self._overlay_drag_base_angle = self.manual_angle
+
+    def _on_overlay_rotation_dragged(self, delta_degrees: float) -> None:
+        """Apply the overlay drag delta through the shared numeric rotation control."""
+        self.rotation_spin.setValue(self._overlay_drag_base_angle + delta_degrees)
+
+    def _finish_overlay_rotation_drag(self) -> None:
+        """Keep the final drag angle as the base for the next drag gesture."""
+        self._overlay_drag_base_angle = self.manual_angle
+
     def _set_manual_rotation(self, value: float) -> None:
         """Apply an additional image-coordinate rotation to image B."""
         self.manual_angle = float(value)
@@ -512,16 +540,25 @@ class SolarRotationToolDialog(QDialog):
         self.opacity_label.setText(f"{value}%")
         self._refresh_overlay()
 
+    def _rotation_center(self) -> tuple[float, float]:
+        """Return the pivot used by the current manual-rotation mode."""
+        if self.reference_rgb is None:
+            return (0.0, 0.0)
+        height, width = self.reference_rgb.shape[:2]
+        rotation_only_mode = "対応点回転のみ" in self.alignment_mode
+        if rotation_only_mode and self.reference_disk is not None:
+            return self.reference_disk.center
+        return (width / 2.0, height / 2.0)
+
     def _current_matrix(self) -> np.ndarray | None:
         """Return the full comparison-to-reference image transform."""
         if self.base_matrix is None or self.reference_rgb is None:
             return None
-        height, width = self.reference_rgb.shape[:2]
         rotation_only_mode = "対応点回転のみ" in self.alignment_mode
         rotation_center = (
             self.reference_disk.center
             if rotation_only_mode and self.reference_disk is not None
-            else (width / 2.0, height / 2.0)
+            else self._rotation_center()
         )
         applied_angle = (
             self.automatic_angle + self.manual_angle
@@ -560,21 +597,47 @@ class SolarRotationToolDialog(QDialog):
         return np.ascontiguousarray(warped), np.ascontiguousarray(valid)
 
     def _composite(self) -> np.ndarray | None:
-        """Blend image B over A while preserving pixels outside B's footprint."""
+        """Blend complementary cyan/red images while preserving B's footprint."""
         if self.reference_rgb is None:
             return None
+
+        reference_intensity = self.reference_rgb[..., 0]
+        reference_tinted = np.zeros_like(self.reference_rgb)
+        reference_tinted[..., 1] = reference_intensity
+        reference_tinted[..., 2] = reference_intensity
+
         warped_result = self._warped_comparison()
         if warped_result is None:
-            return self.reference_rgb
+            return reference_tinted
+
         warped, valid = warped_result
+        comparison_tinted = np.zeros_like(warped)
+        comparison_tinted[..., 0] = warped[..., 0]
         alpha = (valid.astype(np.float32) / 255.0) * (self.opacity / 100.0)
-        blend = self.reference_rgb.astype(np.float32) * (1.0 - alpha[..., None])
-        blend += warped.astype(np.float32) * alpha[..., None]
+        blend = reference_tinted.astype(np.float32) * (1.0 - alpha[..., None])
+        blend += comparison_tinted.astype(np.float32) * alpha[..., None]
         return np.clip(blend, 0, 255).astype(np.uint8)
 
     def _refresh_overlay(self) -> None:
-        """Refresh the overlay without discarding its current zoom/pan."""
+        """Refresh the complementary overlay and its orientation/rotation guides."""
         self.overlay_canvas.set_image(self._composite(), reset_view=False)
+        matrix = self._current_matrix()
+        if matrix is None or self.reference_rgb is None:
+            self.overlay_canvas.set_orientation_axes(None)
+            self.overlay_canvas.set_rotation_interaction_enabled(False)
+            return
+
+        pivot = self._rotation_center()
+        reference_up = (0.0, -1.0)
+        comparison_up_array = matrix[:, :2] @ np.asarray([0.0, -1.0])
+        comparison_up = (
+            float(comparison_up_array[0]),
+            float(comparison_up_array[1]),
+        )
+        self.overlay_canvas.set_orientation_axes(
+            pivot, reference_up, comparison_up
+        )
+        self.overlay_canvas.set_rotation_interaction_enabled(True, pivot)
 
     def _update_measurement(self) -> None:
         """Update landmark status and derived rotation values."""
@@ -685,6 +748,16 @@ class SolarRotationToolDialog(QDialog):
             "comparison_to_reference_scale": self.scale,
             "comparison_to_reference_matrix": matrix.tolist(),
             "overlay_opacity_percent": self.opacity,
+            "overlay_colormap": {
+                "reference": "cyan",
+                "comparison": "red",
+                "method": "complementary_color_alpha_blend",
+            },
+            "overlay_axes_origin_px": list(self._rotation_center()),
+            "reference_image_up_vector_px": [0.0, -1.0],
+            "comparison_image_up_vector_in_reference": (
+                matrix[:, :2] @ np.asarray([0.0, -1.0])
+            ).tolist(),
             "overlay_image": str(output_path),
         }
         json_path = output_path.with_suffix(".json")

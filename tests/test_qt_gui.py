@@ -41,6 +41,53 @@ class SolarRotationDialogTests(unittest.TestCase):
         self.assertEqual(dialog.reference_points, [(99.0, 98.0)])
         self.assertEqual(dialog.comparison_points, [(89.0, 88.0)])
 
+    def test_overlay_uses_complementary_cyan_and_red_channels(self) -> None:
+        """Identical pixels blend to grey; differences retain their source colors."""
+        dialog = SolarRotationToolDialog()
+        dialog.reference_rgb = np.full((8, 8, 3), 100, dtype=np.uint8)
+        dialog.comparison_rgb = np.full((8, 8, 3), 100, dtype=np.uint8)
+        dialog.base_matrix = np.asarray(
+            [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]], dtype=np.float64
+        )
+        dialog.opacity = 50
+
+        identical = dialog._composite()
+        self.assertIsNotNone(identical)
+        assert identical is not None
+        np.testing.assert_array_equal(identical[3, 3], [50, 50, 50])
+
+        dialog.comparison_rgb = np.zeros((8, 8, 3), dtype=np.uint8)
+        reference_only = dialog._composite()
+        self.assertIsNotNone(reference_only)
+        assert reference_only is not None
+        np.testing.assert_array_equal(reference_only[3, 3], [0, 50, 50])
+
+        dialog.reference_rgb = np.zeros((8, 8, 3), dtype=np.uint8)
+        dialog.comparison_rgb = np.full((8, 8, 3), 100, dtype=np.uint8)
+        comparison_only = dialog._composite()
+        self.assertIsNotNone(comparison_only)
+        assert comparison_only is not None
+        np.testing.assert_array_equal(comparison_only[3, 3], [50, 0, 0])
+
+    def test_overlay_axes_follow_the_transformed_comparison_up_direction(self) -> None:
+        """The B-up arrow follows the linear part of the displayed transform."""
+        dialog = SolarRotationToolDialog()
+        dialog.reference_rgb = np.zeros((100, 100, 3), dtype=np.uint8)
+        dialog.comparison_rgb = np.zeros((100, 100, 3), dtype=np.uint8)
+        dialog.base_matrix = np.asarray(
+            [[0.0, -1.0, 100.0], [1.0, 0.0, 0.0]], dtype=np.float64
+        )
+        dialog.alignment_mode = "対応点による相似変換"
+
+        dialog._refresh_overlay()
+
+        axes = dialog.overlay_canvas.orientation_axes
+        self.assertIsNotNone(axes)
+        assert axes is not None
+        _, reference_up, comparison_up = axes
+        self.assertEqual(reference_up, (0.0, -1.0))
+        np.testing.assert_allclose(comparison_up, [1.0, 0.0], atol=1e-12)
+        self.assertTrue(dialog.overlay_canvas.rotation_interaction_enabled)
     def test_min2_mode_changes_only_rotation_about_the_solar_center(self) -> None:
         """The rotation-only option preserves the MIN2 base scale and disk center."""
         dialog = SolarRotationToolDialog()

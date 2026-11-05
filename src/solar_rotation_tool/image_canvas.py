@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from math import hypot
+from math import atan2, degrees, hypot, pi
 
 import numpy as np
 from PyQt6.QtCore import QPointF, QRectF, Qt, pyqtSignal
@@ -15,6 +15,9 @@ class ImageCanvas(QWidget):
 
     point_clicked = pyqtSignal(float, float)
     disk_changed = pyqtSignal(float, float, float)
+    rotation_drag_started = pyqtSignal()
+    rotation_dragged = pyqtSignal(float)
+    rotation_drag_finished = pyqtSignal()
 
     def __init__(self, title: str, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -32,6 +35,15 @@ class ImageCanvas(QWidget):
         self._panning = False
         self._last_pan_position: QPointF | None = None
         self._disk_drag_mode: str | None = None
+        self.orientation_axes: tuple[
+            tuple[float, float], tuple[float, float], tuple[float, float]
+        ] | None = None
+        self.rotation_interaction_enabled = False
+        self.rotation_pivot: tuple[float, float] | None = None
+        self._rotating = False
+        self._rotation_pivot_widget: QPointF | None = None
+        self._rotation_previous_angle = 0.0
+        self._rotation_accumulated_degrees = 0.0
         self.setMinimumSize(320, 280)
         self.setMouseTracking(True)
 
@@ -71,12 +83,44 @@ class ImageCanvas(QWidget):
         self.disk_radius = radius
         self.update()
 
+    def set_orientation_axes(
+        self,
+        origin: tuple[float, float] | None,
+        reference_up: tuple[float, float] = (0.0, -1.0),
+        comparison_up: tuple[float, float] = (0.0, -1.0),
+    ) -> None:
+        """Set the two image-up directions to draw over the overlay."""
+        self.orientation_axes = (
+            (origin, reference_up, comparison_up) if origin is not None else None
+        )
+        self.update()
+
+    def set_rotation_interaction_enabled(
+        self,
+        enabled: bool,
+        pivot: tuple[float, float] | None = None,
+    ) -> None:
+        """Enable left-button dragging to rotate around an image-space pivot."""
+        self.rotation_interaction_enabled = enabled
+        self.rotation_pivot = pivot
+        if enabled:
+            self.setCursor(Qt.CursorShape.OpenHandCursor)
+        elif not self.manual_disk_edit_enabled:
+            self.setCursor(Qt.CursorShape.ArrowCursor)
+        self.update()
+
     def set_manual_disk_edit_enabled(self, enabled: bool) -> None:
         """Enable dragging the disk center or radius handle."""
         self.manual_disk_edit_enabled = enabled
-        self.setCursor(
-            Qt.CursorShape.OpenHandCursor if enabled else Qt.CursorShape.CrossCursor
-        )
+        if self.rotation_interaction_enabled:
+            cursor = Qt.CursorShape.OpenHandCursor
+        else:
+            cursor = (
+                Qt.CursorShape.OpenHandCursor
+                if enabled
+                else Qt.CursorShape.CrossCursor
+            )
+        self.setCursor(cursor)
         self.update()
 
     def fit_to_view(self) -> None:
@@ -182,6 +226,63 @@ class ImageCanvas(QWidget):
             painter.drawEllipse(handle, handle_size, handle_size)
             painter.setBrush(Qt.BrushStyle.NoBrush)
 
+        self._draw_orientation_axes(painter)
+
+    def _draw_orientation_axes(self, painter: QPainter) -> None:
+        """Draw separate, labelled arrows for the reference and comparison up directions."""
+        if self.orientation_axes is None:
+            return
+        origin, reference_up, comparison_up = self.orientation_axes
+        center = self._image_to_widget(origin)
+        self._draw_direction_arrow(
+            painter,
+            center + QPointF(-4.0, 0.0),
+            reference_up,
+            QColor(60, 220, 255),
+            "A上",
+        )
+        self._draw_direction_arrow(
+            painter,
+            center + QPointF(4.0, 0.0),
+            comparison_up,
+            QColor(255, 80, 80),
+            "B上",
+        )
+
+    @staticmethod
+    def _draw_direction_arrow(
+        painter: QPainter,
+        origin: QPointF,
+        direction: tuple[float, float],
+        color: QColor,
+        label: str,
+    ) -> None:
+        """Draw a high-contrast arrow with a short label."""
+        length = hypot(direction[0], direction[1])
+        if length <= 1e-12:
+            return
+        dx, dy = direction[0] / length, direction[1] / length
+        end = origin + QPointF(dx * 78.0, dy * 78.0)
+        perpendicular = QPointF(-dy * 6.0, dx * 6.0)
+        arrow_base = end - QPointF(dx * 13.0, dy * 13.0)
+        left = arrow_base + perpendicular
+        right = arrow_base - perpendicular
+
+        painter.setPen(QPen(QColor(0, 0, 0, 220), 6))
+        painter.drawLine(origin, end)
+        painter.drawLine(end, left)
+        painter.drawLine(end, right)
+        painter.setPen(QPen(color, 3))
+        painter.drawLine(origin, end)
+        painter.drawLine(end, left)
+        painter.drawLine(end, right)
+
+        label_position = end + QPointF(6.0, -5.0)
+        painter.setPen(QPen(QColor(0, 0, 0, 230), 4))
+        painter.drawText(label_position + QPointF(1.0, 1.0), label)
+        painter.setPen(color)
+        painter.drawText(label_position, label)
+
     def wheelEvent(self, event: QWheelEvent | None) -> None:  # noqa: N802
         """Zoom around the cursor while keeping the pixel beneath it stationary."""
         if event is None:
@@ -225,6 +326,25 @@ class ImageCanvas(QWidget):
             event.accept()
             return
         if event.button() != Qt.MouseButton.LeftButton:
+            return
+
+        if self.rotation_interaction_enabled:
+            if not self._image_rect().contains(event.position()):
+                return
+            pivot = self.rotation_pivot
+            if pivot is None:
+                pivot = (self.image_width / 2.0, self.image_height / 2.0)
+            pivot_widget = self._image_to_widget(pivot)
+            offset = event.position() - pivot_widget
+            if hypot(offset.x(), offset.y()) < 2.0:
+                return
+            self._rotating = True
+            self._rotation_pivot_widget = pivot_widget
+            self._rotation_previous_angle = atan2(offset.y(), offset.x())
+            self._rotation_accumulated_degrees = 0.0
+            self.rotation_drag_started.emit()
+            self.setCursor(Qt.CursorShape.ClosedHandCursor)
+            event.accept()
             return
 
         image_point = self._widget_to_image(event.position())
@@ -281,6 +401,16 @@ class ImageCanvas(QWidget):
             self.update()
             return
 
+        if self._rotating and self._rotation_pivot_widget is not None:
+            offset = event.position() - self._rotation_pivot_widget
+            current_angle = atan2(offset.y(), offset.x())
+            step = current_angle - self._rotation_previous_angle
+            step = (step + pi) % (2.0 * pi) - pi
+            self._rotation_accumulated_degrees += degrees(step)
+            self._rotation_previous_angle = current_angle
+            self.rotation_dragged.emit(self._rotation_accumulated_degrees)
+            return
+
         if self._disk_drag_mode is None or self.disk_center is None:
             return
         image_point = self._widget_to_image(event.position(), require_inside=False)
@@ -302,17 +432,32 @@ class ImageCanvas(QWidget):
         """Finish panning or publish the manually edited disk circle."""
         if event is None:
             return
+        if event.button() == Qt.MouseButton.LeftButton and self._rotating:
+            self._rotating = False
+            self._rotation_pivot_widget = None
+            self.rotation_drag_finished.emit()
+            self.setCursor(
+                Qt.CursorShape.OpenHandCursor
+                if self.rotation_interaction_enabled
+                else Qt.CursorShape.ArrowCursor
+            )
+            event.accept()
+            return
         if self._panning and event.button() in (
             Qt.MouseButton.MiddleButton,
             Qt.MouseButton.RightButton,
         ):
             self._panning = False
             self._last_pan_position = None
-            self.setCursor(
-                Qt.CursorShape.OpenHandCursor
-                if self.manual_disk_edit_enabled
-                else Qt.CursorShape.CrossCursor
-            )
+            if self.rotation_interaction_enabled:
+                cursor = Qt.CursorShape.OpenHandCursor
+            else:
+                cursor = (
+                    Qt.CursorShape.OpenHandCursor
+                    if self.manual_disk_edit_enabled
+                    else Qt.CursorShape.CrossCursor
+                )
+            self.setCursor(cursor)
             event.accept()
             return
 
