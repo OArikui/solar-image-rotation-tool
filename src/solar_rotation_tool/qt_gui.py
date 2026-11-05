@@ -541,12 +541,23 @@ class SolarRotationToolDialog(QDialog):
         self._refresh_overlay()
 
     def _rotation_center(self) -> tuple[float, float]:
-        """Return the pivot used by the current manual-rotation mode."""
+        """Return the solar-disk center for disk-aligned overlays, else image center."""
         if self.reference_rgb is None:
             return (0.0, 0.0)
         height, width = self.reference_rgb.shape[:2]
-        rotation_only_mode = "対応点回転のみ" in self.alignment_mode
-        if rotation_only_mode and self.reference_disk is not None:
+        disk_alignment_modes = {
+            "MIN2中心・半径補正",
+            "手動中心・半径補正",
+            "MIN2中心・半径補正＋対応点回転のみ",
+            "手動中心・半径補正＋対応点回転のみ",
+        }
+        has_disk_alignment = (
+            self.alignment_mode in disk_alignment_modes
+            and self.reference_disk is not None
+            and self.comparison_disk is not None
+            and self.base_matrix is not None
+        )
+        if has_disk_alignment and self.reference_disk is not None:
             return self.reference_disk.center
         return (width / 2.0, height / 2.0)
 

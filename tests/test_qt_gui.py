@@ -88,6 +88,56 @@ class SolarRotationDialogTests(unittest.TestCase):
         self.assertEqual(reference_up, (0.0, -1.0))
         np.testing.assert_allclose(comparison_up, [1.0, 0.0], atol=1e-12)
         self.assertTrue(dialog.overlay_canvas.rotation_interaction_enabled)
+    def test_overlay_rotation_uses_min2_solar_center_as_pivot(self) -> None:
+        """The overlay drag rotation and up arrows use the MIN2 solar center."""
+        dialog = SolarRotationToolDialog()
+        dialog.reference_rgb = np.zeros((320, 420, 3), dtype=np.uint8)
+        dialog.comparison_rgb = np.zeros((300, 400, 3), dtype=np.uint8)
+        reference_disk = DiskGeometry((173.0, 141.0), 95.0, "MIN2 v2.4.1")
+        comparison_disk = DiskGeometry((188.0, 132.0), 82.0, "MIN2 v2.4.1")
+        dialog.reference_disk = reference_disk
+        dialog.comparison_disk = comparison_disk
+        base_matrix = center_radius_alignment_matrix(
+            reference_disk.center,
+            reference_disk.radius,
+            comparison_disk.center,
+            comparison_disk.radius,
+        )
+        dialog.base_matrix = base_matrix
+        dialog.alignment_mode = "MIN2中心・半径補正"
+
+        dialog._refresh_overlay()
+
+        self.assertEqual(dialog._rotation_center(), reference_disk.center)
+        self.assertEqual(dialog.overlay_canvas.rotation_pivot, reference_disk.center)
+        axes = dialog.overlay_canvas.orientation_axes
+        self.assertIsNotNone(axes)
+        assert axes is not None
+        self.assertEqual(axes[0], reference_disk.center)
+
+        source_center = np.asarray(
+            [comparison_disk.center[0], comparison_disk.center[1], 1.0]
+        )
+        initial_matrix = dialog._current_matrix()
+        self.assertIsNotNone(initial_matrix)
+        assert initial_matrix is not None
+        np.testing.assert_allclose(
+            initial_matrix @ source_center, reference_disk.center, atol=1e-10
+        )
+
+        dialog._set_manual_rotation(23.0)
+        rotated_matrix = dialog._current_matrix()
+        self.assertIsNotNone(rotated_matrix)
+        assert rotated_matrix is not None
+        np.testing.assert_allclose(
+            rotated_matrix @ source_center, reference_disk.center, atol=1e-10
+        )
+        self.assertEqual(dialog.overlay_canvas.rotation_pivot, reference_disk.center)
+
+        # A point-only alignment must not reuse stale MIN2 geometry.
+        dialog.alignment_mode = "対応点による相似変換"
+        self.assertEqual(dialog._rotation_center(), (210.0, 160.0))
+
     def test_min2_mode_changes_only_rotation_about_the_solar_center(self) -> None:
         """The rotation-only option preserves the MIN2 base scale and disk center."""
         dialog = SolarRotationToolDialog()
