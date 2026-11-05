@@ -1,0 +1,10 @@
+# MIN2 v2.4.3 configuration for solar-image-rotation-tool.
+# Values may be overridden by explicit detect_solar_disk keyword arguments.
+n: 10
+light_threshold: 50
+limb_wigth: "1/30"
+iter_cycles: 2
+show: false
+debug: false
+show_simple: false
+dir_mode_limb_wigth: 60

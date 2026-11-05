@@ -1,8 +1,9 @@
-"""Adapter for the vendored MIN2 v2.4.1 solar-disk detector."""
+"""Adapter for the vendored MIN2 v2.4.3 solar-disk detector."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 
 import numpy as np
 
@@ -19,12 +20,17 @@ class DiskGeometry:
 def detect_solar_disk(
     image: np.ndarray,
     *,
-    n: int = 10,
-    light_threshold: int = 50,
-    limb_wigth: int = 24,
-    iter_cycles: int = 2,
+    n: int | None = None,
+    light_threshold: int | None = None,
+    limb_wigth: int | str | None = None,
+    iter_cycles: int | None = None,
+    config_file: str | Path | None = None,
 ) -> DiskGeometry:
-    """Detect the solar-disk center and radius with MIN2 v2.4.1."""
+    """Detect the solar-disk center and radius with MIN2 v2.4.3.
+
+    The bundled YAML configuration is used unless a config_file is supplied.
+    Explicit keyword arguments take precedence over values in that file.
+    """
     values = np.asarray(image)
     if values.ndim != 2 or values.size == 0:
         raise ValueError("MIN2には空でない2次元グレースケール画像が必要です。")
@@ -36,6 +42,8 @@ def detect_solar_disk(
         version,
     )
 
+    default_config = Path(__file__).resolve().parent / "vendor" / "min2_config.yaml"
+    selected_config = Path(config_file) if config_file is not None else default_config
     (center_x, center_y), radius = MIN2_ignore_sunspots(
         img_inst=values,
         n=n,
@@ -45,6 +53,7 @@ def detect_solar_disk(
         show=False,
         debug=False,
         show_simple=True,
+        config=selected_config,
     )
     center = (float(center_x), float(center_y))
     radius_value = float(radius)
