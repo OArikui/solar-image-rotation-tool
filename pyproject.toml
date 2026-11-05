@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "solar-image-rotation-tool"
-version = "0.1.0"
+version = "0.2.0"
 description = "GUI tool for aligning two solar images and measuring their relative rotation"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -12,6 +12,7 @@ authors = [{ name = "Fuji Astronomy Club Coders" }]
 dependencies = [
     "astropy>=6.1",
     "numpy>=2.0",
+    "PyYAML>=6.0",
     "matplotlib>=3.9",
     "opencv-python-headless>=4.10",
     "PyQt6>=6.7",
@@ -29,6 +30,9 @@ solar-image-rotation-tool = "solar_rotation_tool.app:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+solar_rotation_tool = ["vendor/min2_config.yaml"]
 
 [tool.ruff]
 line-length = 100

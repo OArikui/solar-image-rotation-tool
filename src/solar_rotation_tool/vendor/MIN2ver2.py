@@ -20,7 +20,7 @@ import numpy as np
 from matplotlib import gridspec
 from matplotlib.patches import Circle
 
-version = "MIN2 v2.4.1"  # yamlによるConfig実装
+version = "MIN2 v2.4.3"  # limb_wigthの割合指定を修正
 
 # spot の 4 番目の要素(走査方向)
 DIR_X_LINE = 0  # 横線(yが固定)をx方向に走査して得た点
@@ -39,6 +39,25 @@ _NO_IMAGE_MSG = (
 )
 
 
+def _parse_limb_width_ratio(value: str) -> float:
+    """太陽半径に対する縁幅の割合を分子/分母から取得する。"""
+    parts = value.split("/")
+    if len(parts) != 2:
+        raise ValueError(
+            f"設定 'limb_wigth' の割合が不正です: {value!r}。分子/分母形式で指定してください。"
+        )
+    try:
+        numerator, denominator = (int(part.strip()) for part in parts)
+    except ValueError as exc:
+        raise ValueError(
+            f"設定 'limb_wigth' の割合が不正です: {value!r}。整数の分子と分母が必要です。"
+        ) from exc
+    if numerator < 0 or denominator <= 0:
+        raise ValueError(
+            f"設定 'limb_wigth' の割合が不正です: {value!r}。分子は0以上、分母は1以上にしてください。"
+        )
+    return numerator / denominator
+
 # ---------------------------------------------------------------------------
 # 設定(YAML は任意。無くても、PyYAML が未インストールでも動く)
 # ---------------------------------------------------------------------------
@@ -53,7 +72,7 @@ class MIN2Config:
 
     n: int = 10  # 画像格子の分割数(2以上)
     light_threshold: int = 50  # 太陽像とみなす輝度のしきい値
-    limb_wigth: int = 24  # 太陽の縁の幅の基準値
+    limb_wigth: int | str = 24  # ピクセル値、または太陽半径に対する割合
     iter_cycles: int = 2  # 黒点排除の最大反復回数(0なら排除なし)
     show: bool = False  # 結果を描画するか
     debug: bool = False  # ログ/途中経過を出すか
@@ -64,12 +83,19 @@ class MIN2Config:
         """Validate configuration values after dataclass initialization."""
         for f in fields(self):
             value = getattr(self, f.name)
+            if f.name == "limb_wigth" and isinstance(value, str):
+                _parse_limb_width_ratio(value)
+                continue
             if f.type in (bool, "bool"):
                 ok = isinstance(value, bool)
             else:  # int。bool は int のサブクラスなので除外する
                 ok = isinstance(value, int) and not isinstance(value, bool)
             if not ok:
-                raise ValueError(f"設定 '{f.name}' の型が不正です: {value!r} ({f.type} が必要)")
+                raise ValueError(
+                    f"設定 '{f.name}' の型が不正です: {value!r} ({f.type} が必要)"
+                )
+        if isinstance(self.limb_wigth, int) and self.limb_wigth < 0:
+            raise ValueError("設定 'limb_wigth' は 0 以上にしてください。")
         if self.n < 2:
             raise ValueError("設定 'n'(分割数)は 2 以上にしてください。")
         if self.iter_cycles < 0:
@@ -101,7 +127,9 @@ def find_config_file() -> pathlib.Path | None:
     if env:
         path = pathlib.Path(env)
         if not path.is_file():
-            raise FileNotFoundError(f"{CONFIG_ENV_VAR} が指すファイルがありません: {env}")
+            raise FileNotFoundError(
+                f"{CONFIG_ENV_VAR} が指すファイルがありません: {env}"
+            )
         return path
     for base in (pathlib.Path.cwd(), pathlib.Path(__file__).resolve().parent):
         path = base / CONFIG_FILENAME
@@ -157,7 +185,9 @@ def load_config(
 
     unknown = sorted(set(data) - _CONFIG_KEYS)
     if unknown:
-        raise ValueError(f"未知の設定キー: {unknown}(有効なキー: {sorted(_CONFIG_KEYS)})")
+        raise ValueError(
+            f"未知の設定キー: {unknown}(有効なキー: {sorted(_CONFIG_KEYS)})"
+        )
     return replace(MIN2Config(), **data)
 
 
@@ -449,7 +479,9 @@ def show_circle(
 
     iter_text = "Last" if is_last else str(iteration_count)
     img_name = pathlib.Path(img_path).name if img_path else "Unknown"
-    fig.suptitle(f"{img_name}  |  Iteration: {iter_text}", fontsize=16, fontweight="bold")
+    fig.suptitle(
+        f"{img_name}  |  Iteration: {iter_text}", fontsize=16, fontweight="bold"
+    )
 
     # メイン画像の描画
     ax_main = fig.add_subplot(gs[:, :3])
@@ -495,7 +527,9 @@ def show_circle(
         )
 
     _draw_division_lines(ax_main, w, h, n, alpha=0.3)
-    ax_main.text(0.05, 0.9, f"n={n}", color="cyan", fontsize=10, transform=ax_main.transAxes)
+    ax_main.text(
+        0.05, 0.9, f"n={n}", color="cyan", fontsize=10, transform=ax_main.transAxes
+    )
     ax_main.legend()
     ax_main.axis("equal")
 
@@ -537,7 +571,9 @@ def show_circle(
 
         ax_sub_twin = ax_sub.twinx()
         color_diff = "tab:cyan"
-        ax_sub_twin.plot(x_coords, grad_vals, color=color_diff, linewidth=1.5, linestyle="--")
+        ax_sub_twin.plot(
+            x_coords, grad_vals, color=color_diff, linewidth=1.5, linestyle="--"
+        )
         ax_sub_twin.tick_params(axis="y", labelcolor=color_diff, labelsize=7)
 
         ax_sub.axvline(0, color="red", linestyle="-", linewidth=1, alpha=0.5)
@@ -592,7 +628,9 @@ def show_circle_simple(
 
     img_name = pathlib.Path(img_path).name if img_path else "Unknown"
     iter_text = "Last" if is_last else str(iteration_count)
-    fig.suptitle(f"{img_name}  |  Iteration: {iter_text}", fontsize=16, fontweight="bold")
+    fig.suptitle(
+        f"{img_name}  |  Iteration: {iter_text}", fontsize=16, fontweight="bold"
+    )
 
     _draw_division_lines(ax, w, h, n, alpha=0.5)
     ax.text(0.05, 0.9, f"n={n}", color="cyan", fontsize=10, transform=ax.transAxes)
@@ -609,7 +647,7 @@ def MIN2_ignore_sunspots(
     img_inst: np.ndarray | str = "PATH",
     n: int | None = None,
     light_threshold: int | None = None,
-    limb_wigth: int | None = None,
+    limb_wigth: int | str | None = None,
     iter_cycles: int | None = None,
     show: bool | None = None,
     debug: bool | None = None,
@@ -626,7 +664,7 @@ def MIN2_ignore_sunspots(
         img_inst: 入力画像（グレースケール/カラー）または読み込み指示("PATH"ならimg_pathを読み込む)。
         n (int | None): 画像格子の分割数(2以上)。既定は 10 です。
         light_threshold (int | None): 太陽の明るさの基準しきい値(既定50)。16bit画像では自動で256倍されます。
-        limb_wigth (int | None): 太陽の縁の幅の基準値。既定は 24 です。
+        limb_wigth (int | str | None): 太陽の縁の幅。整数はピクセル値、文字列は太陽半径に対する割合("1/20"など)。既定は 24 です。
         iter_cycles (int | None): 黒点排除の最大反復回数。複数の黒点に対応できます。0なら排除なし。既定は2。
             黒点が見つからなくなった時点で早期終了します。
         show (bool | None): 最終的な検出結果の画像を表示するかどうか。
@@ -646,8 +684,22 @@ def MIN2_ignore_sunspots(
 
     cfg = load_config(config)
     n = cfg.n if n is None else n
-    light_threshold = cfg.light_threshold if light_threshold is None else light_threshold
+    light_threshold = (
+        cfg.light_threshold if light_threshold is None else light_threshold
+    )
     limb_wigth = cfg.limb_wigth if limb_wigth is None else limb_wigth
+    if isinstance(limb_wigth, str):
+        limb_width_ratio = _parse_limb_width_ratio(limb_wigth)
+        absolute_limb_width = None
+    elif isinstance(limb_wigth, int) and not isinstance(limb_wigth, bool):
+        if limb_wigth < 0:
+            raise ValueError("limb_wigth は 0 以上にしてください。")
+        limb_width_ratio = None
+        absolute_limb_width = limb_wigth
+    else:
+        raise ValueError(
+            "limb_wigth は 0 以上の整数、または分子/分母形式の文字列で指定してください。"
+        )
     iter_cycles = cfg.iter_cycles if iter_cycles is None else iter_cycles
     show = cfg.show if show is None else show
     debug = cfg.debug if debug is None else debug
@@ -698,6 +750,11 @@ def MIN2_ignore_sunspots(
     safe_points = list(spots)
 
     for cycle in range(1, iter_cycles + 1):
+        if limb_width_ratio is not None:
+            current_limb_width = r * limb_width_ratio
+        else:
+            assert absolute_limb_width is not None
+            current_limb_width = absolute_limb_width
         if debug:
             print(f"iter: {cycle}")
 
@@ -718,7 +775,9 @@ def MIN2_ignore_sunspots(
             print("[WARN]:外側の点が3点未満のため、黒点排除を打ち切ります。")
             break
         try:
-            cxo, cyo, ro = fit_circle(np.array(outside_spots, dtype=float), show, image, n)
+            cxo, cyo, ro = fit_circle(
+                np.array(outside_spots, dtype=float), show, image, n
+            )
         except ValueError as e:
             print(f"[WARN]:外側の点から円を作れないため、黒点排除を打ち切ります。({e})")
             break
@@ -735,7 +794,9 @@ def MIN2_ignore_sunspots(
                     simple=show_simple,
                     n=n,
                 )
-            print(f"    [INFO]:外側の点の数:{len(outside_spots)},全体の点の数:{len(spots)}")
+            print(
+                f"    [INFO]:外側の点の数:{len(outside_spots)},全体の点の数:{len(spots)}"
+            )
 
         sunspots: list[int] = []
         retry_points: list[list] = []
@@ -753,7 +814,7 @@ def MIN2_ignore_sunspots(
             if debug:
                 print(f"    {i} x,y:{x, y} min2far:{min2far},gap:{gap}")
 
-            if gap > limb_wigth * (2 / 3):
+            if gap > current_limb_width * (2 / 3):
                 sunspots.append(i)
                 retry = retry_edge_on_spot(
                     spot=point,
@@ -795,7 +856,9 @@ def MIN2_ignore_sunspots(
 
 def _collect_images(dirpath: str) -> list[pathlib.Path]:
     exts = {".jpg", ".jpeg", ".png", ".tif", ".tiff"}
-    return sorted(p for p in pathlib.Path(dirpath).iterdir() if p.suffix.lower() in exts)
+    return sorted(
+        p for p in pathlib.Path(dirpath).iterdir() if p.suffix.lower() in exts
+    )
 
 
 def main() -> None:
@@ -807,7 +870,9 @@ def main() -> None:
     parser.add_argument(
         "path", nargs="?", help="画像ファイルまたはフォルダ。省略時はダイアログで選択"
     )
-    parser.add_argument("--dir", action="store_true", help="フォルダ内の全画像を処理する")
+    parser.add_argument(
+        "--dir", action="store_true", help="フォルダ内の全画像を処理する"
+    )
     parser.add_argument(
         "--config",
         help=f"YAML設定ファイル。省略時は ${CONFIG_ENV_VAR}、./{CONFIG_FILENAME}、"
@@ -816,7 +881,9 @@ def main() -> None:
     args = parser.parse_args()
 
     # CLI は従来どおり show/debug を既定で有効にする(YAMLで上書き可)
-    cfg = load_config(args.config, search=args.config is None, defaults={"show": True, "debug": True})
+    cfg = load_config(
+        args.config, search=args.config is None, defaults={"show": True, "debug": True}
+    )
 
     path = args.path
     if path is None:
@@ -831,7 +898,9 @@ def main() -> None:
             path = askopenfilename(
                 title="画像を選択してください",
                 # セミコロン区切りの1文字列はWindows以外で効かないのでタプルで渡す
-                filetypes=[("Image files", ("*.jpg", "*.jpeg", "*.png", "*.tif", "*.tiff"))],
+                filetypes=[
+                    ("Image files", ("*.jpg", "*.jpeg", "*.png", "*.tif", "*.tiff"))
+                ],
             )
         root.destroy()
         if not path:

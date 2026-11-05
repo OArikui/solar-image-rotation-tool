@@ -93,8 +93,8 @@ class SolarRotationDialogTests(unittest.TestCase):
         dialog = SolarRotationToolDialog()
         dialog.reference_rgb = np.zeros((320, 420, 3), dtype=np.uint8)
         dialog.comparison_rgb = np.zeros((300, 400, 3), dtype=np.uint8)
-        reference_disk = DiskGeometry((173.0, 141.0), 95.0, "MIN2 v2.4.1")
-        comparison_disk = DiskGeometry((188.0, 132.0), 82.0, "MIN2 v2.4.1")
+        reference_disk = DiskGeometry((173.0, 141.0), 95.0, "MIN2 v2.4.3")
+        comparison_disk = DiskGeometry((188.0, 132.0), 82.0, "MIN2 v2.4.3")
         dialog.reference_disk = reference_disk
         dialog.comparison_disk = comparison_disk
         base_matrix = center_radius_alignment_matrix(
@@ -143,8 +143,8 @@ class SolarRotationDialogTests(unittest.TestCase):
         dialog = SolarRotationToolDialog()
         dialog.reference_rgb = np.zeros((400, 400, 3), dtype=np.uint8)
         dialog.comparison_rgb = np.zeros((400, 400, 3), dtype=np.uint8)
-        reference_disk = DiskGeometry((200.0, 200.0), 100.0, "MIN2 v2.4.1")
-        comparison_disk = DiskGeometry((190.0, 205.0), 80.0, "MIN2 v2.4.1")
+        reference_disk = DiskGeometry((200.0, 200.0), 100.0, "MIN2 v2.4.3")
+        comparison_disk = DiskGeometry((190.0, 205.0), 80.0, "MIN2 v2.4.3")
         dialog.reference_disk = reference_disk
         dialog.comparison_disk = comparison_disk
         base_matrix = center_radius_alignment_matrix(
