@@ -3,8 +3,8 @@
 import unittest
 
 import numpy as np
-from PyQt6.QtCore import QPoint, QPointF, Qt
-from PyQt6.QtTest import QTest
+from PyQt6.QtCore import QEvent, QPointF, Qt
+from PyQt6.QtGui import QMouseEvent
 from PyQt6.QtWidgets import QApplication
 
 from solar_rotation_tool.image_canvas import ImageCanvas
@@ -51,14 +51,38 @@ class ImageCanvasTests(unittest.TestCase):
         QApplication.processEvents()
 
         pivot_widget = canvas._image_to_widget(pivot)
-        start = QPoint(round(pivot_widget.x() + 40.0), round(pivot_widget.y()))
-        end = QPoint(round(pivot_widget.x()), round(pivot_widget.y() + 40.0))
+        start = QPointF(pivot_widget.x() + 40.0, pivot_widget.y())
+        end = QPointF(pivot_widget.x(), pivot_widget.y() + 40.0)
         deltas: list[float] = []
         canvas.rotation_dragged.connect(deltas.append)
 
-        QTest.mousePress(canvas, Qt.MouseButton.LeftButton, pos=start)
-        QTest.mouseMove(canvas, end, delay=10)
-        QTest.mouseRelease(canvas, Qt.MouseButton.LeftButton, pos=end)
+        press = QMouseEvent(
+            QEvent.Type.MouseButtonPress,
+            start,
+            start,
+            Qt.MouseButton.LeftButton,
+            Qt.MouseButton.LeftButton,
+            Qt.KeyboardModifier.NoModifier,
+        )
+        move = QMouseEvent(
+            QEvent.Type.MouseMove,
+            end,
+            end,
+            Qt.MouseButton.NoButton,
+            Qt.MouseButton.LeftButton,
+            Qt.KeyboardModifier.NoModifier,
+        )
+        release = QMouseEvent(
+            QEvent.Type.MouseButtonRelease,
+            end,
+            end,
+            Qt.MouseButton.LeftButton,
+            Qt.MouseButton.NoButton,
+            Qt.KeyboardModifier.NoModifier,
+        )
+        QApplication.sendEvent(canvas, press)
+        QApplication.sendEvent(canvas, move)
+        QApplication.sendEvent(canvas, release)
 
         self.assertTrue(deltas)
         self.assertAlmostEqual(deltas[-1], 90.0, delta=3.0)
