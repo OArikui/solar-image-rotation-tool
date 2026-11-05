@@ -108,7 +108,7 @@ class SolarRotationToolDialog(QDialog):
         root.addLayout(canvases, 3)
 
         disk_row = QHBoxLayout()
-        self.detect_disk_button = QPushButton("MIN2 v2.4.1で中心・半径を自動検出")
+        self.detect_disk_button = QPushButton("MIN2 v2.4.3で中心・半径を自動検出")
         self.manual_disk_checkbox = QCheckBox("中心・半径をマウスで手動調整")
         self.reset_view_button = QPushButton("全画像の表示をリセット")
         self.detect_disk_button.clicked.connect(self._detect_disk_geometry)
@@ -310,7 +310,7 @@ class SolarRotationToolDialog(QDialog):
         self._update_measurement()
 
     def _detect_disk_geometry(self) -> None:
-        """Run MIN2 v2.4.1 independently on the two source images."""
+        """Run MIN2 v2.4.3 independently on the two source images."""
         if self.reference is None or self.comparison is None:
             QMessageBox.warning(self, "画像未選択", "画像 A と画像 B を読み込んでください。")
             return
@@ -673,7 +673,7 @@ class SolarRotationToolDialog(QDialog):
                 else "（回転は未補正）"
             )
             alignment_status = (
-                f"MIN2 v2.4.1による中心・半径補正{rotation_hint} "
+                f"MIN2 v2.4.3による中心・半径補正{rotation_hint} "
                 f"/ 倍率: {self.scale:.6f}"
             )
         elif self.alignment_mode == "手動中心・半径補正":
